@@ -1,0 +1,159 @@
+PSEUDOCODIGO //para mandarle al chat que traduszca todo a python
+AMBIENTE
+	
+  registro= registro de
+  	ID: entero
+    TAM: entero
+    TA: entero
+    TI: entero
+  Fin registro
+	Archivo: Archivo de reg 				//Archivo de entrada en formato csv
+  reg: registro
+
+  Memoria = [mem] # Estado de la memoria
+  Entrada = [procesos] # lista de procesos de entrada
+  Nuevos = [procesos] # Listas de nuevos
+  Listos = [procesos] # Cola de listos
+  ListoySuspendidos = [procesos] # lista de procesos listos y suspendidos
+  Terminados = [procesos] # lista de procesos terminados
+  
+  procesos = registro de           //Registro para cada proceso de las diferentes listas (Entrada, Nuevos, Listos/suspendidos, Listos, Terminados)
+    ID: entero
+    TA: entero 										//Tiempo de arribo
+    TI: entero 										//Tiempo de irrupcion
+    TAM: entero										//Tamaño de proceso
+    ESTADO: AN(30)
+    TF: entero  									//Tiempo de finalizacion
+    TM: entero 										//Tiempo de ingreso a memoria   (TF y TM para calculo de tiempo de espera y eso)
+    TE: entero										//Tiempo de espera del proceso 
+    TR: entero 										//Tiempo de retorno del proceso
+    best_fit_part: entero 				//Variable para almacenar a que particion le corresponde su futura asignacion basandose en el best fit a partir de algun calculo matematico
+    prox: puntero a procesos
+    ant: puntero a procesos
+  Fin registro
+
+  primE, primN, primL, primLS, primT, ult, E, N, L, L_S, T: puntero a procesos 				//No me acuerdo como funcionaba exactamente el pseudo pero pongo un prim y un puntero para cada lista segun su letra inicial 
+
+  mem = registro de 							//Lista para facilitar muestra de tabla de memoria
+    particion1: entero						//250kb
+    fragmentacion1: entero
+    particion2: entero 						//150kb
+    fragmentacion2: entero
+    particion3: entero 						//50kb
+    fragmentacion3: entero
+    particion4: "SO"
+    prox: puntero a mem
+    ant: puntero a mem
+  Fin registro
+
+  prim1, ult1, q: puntero a mem
+
+  Procedimiento Cargar procesos en lista 	 														//Procedimientos para trabajo de listas
+  Procedimiento para buscar en las listas 
+  Procedimiento Borrar procesos de lista 
+  Procedimiento para ordenar lista de nuevos por tiempo de irrupcion 
+  Procedimiento para ordenar lista de entrada por tiempo de arribo 
+  
+  Funcion calculo_best_fit (A:entero):entero 													//El dato A que se ingresa es el tamaño del proceso
+    Si A <= 50 entonces
+     	calculo_best_fit:= 3 																						//Le corresponde la particion de 50kb
+    Sino
+      Si A <= 150 entonces
+      	calculo_best_fit:= 2 																					//le corresponde la particion de 150kb
+      Sino
+      	Si A <= 250 entonces
+        	calculo_best_fit:= 1  																		//Le corre4sponde la particion de 250kb
+        Sino
+        		calculo_best_fit:= 0 																		//significa que el proceso era demasiado grande para ser trabajado con nuestras particiones de memoria
+        Fin
+      Fin
+    Fin
+  Fin Funcion
+          
+  
+  Tiempo_actual: entero  				//para poder calcular si corresponde o no que ingrese el proceso a lista de nuevos / memoria segun su tiempo de arribo.
+  multiprogramacion: entero   	//para control de si se alcanzo un grado de multiprogramacion igual a 5 o no.
+  Tiempo_Espera_prom: entero 	 	// tiempoDeRetorno - TI
+  Tiempo_Retorno_prom: entero 	// tiempoDeFinalizacion - TM
+  cant_proc_E: entero 					//Contador para saber cuantos procesos hay en la lista de entrada y asi poder calcular los promedios (en python capaz no es necesario)
+  cant_proc_N: entero 					//contador de procesos para lista de nuevos
+  cant_proc_L: entero						//contador de procesos para lista de listos
+  cant_proc_LS: entero 					//contador de procesos para lista de listos/suspendidos
+  i: entero 										//controlador de ciclos Manejados por contador
+  
+  
+  Band: logico  	//Bandera para control de ciclo principal, donde al no quedar mas procesos que trabajar en ninguna lista (excepto de terminados) se termina el ciclo principal.
+  Band1: logico 	//Bandera para saber si el Particion 1 tiene un proceso adentro  
+  Band2: logico 	//Bandera para saber si el Particion 2 tiene un proceso adentro     
+  Band3: logico		//Bandera para saber si el Particion 3 tiene un proceso adentro 
+  espacio: logico //bandera para saber si habia algun espacio en memoria libre
+  
+ACCION
+	Tiempo_actual:= 1 																			//Inicializacion de variables y contadores
+  multiprogramacion:= 0
+  band:= falso 																						//banderas que si son falsas significa que esta vacia la particion
+  band1:= falso
+  band2:= falso
+  band3:= falso
+  espacio:= verdadero
+  cant_proc_N:= 0
+  cant_proc_L:= 0
+  cant_proc_LS:= 0
+  
+  Abrir E/S (Archivo) 																		//Abrimos y leemos archivo de entrada
+  Leer (Arch,reg)
+  
+  Mientras NFDA(Arch) hacer 
+  	Procedimiento Cargar procesos en lista de entrada 		//Cargamos lista de entrada, aca usamos la funcion "calculo_best_fit" por ejemplo, y todo lo necesario para cargar los datos de cada proceso
+    cant_proc_E:=cant_proc_E + 1.
+  Fin mientras
+  
+  Procedimiento ordenar lista de entrada por tiempo de arribo 		//Ordenamos lista de entrada
+  
+  Mientras band = falso hacer
+  
+  	Para i:=1 hasta cantidad_procesos hacer  							//controlamos todos los procesos de la lista de entrada para determinar si corresponde su entrada a memoria o no
+    	E:= PrimE
+    	Si *E.TA = Tiempo_actual entonces
+    		Procedimiento Cargar proceso en lista de nuevos
+        Cambiar el estado a nuevo 
+         Procedimiento Borrar proceso de lista de entrada
+        E:= *E.prox
+        cant_proc_E:= cant_proc_E - 1
+        cant_porc_N:= cant_proc_N + 1
+      fin Si  
+    Fin para
+    
+  	Si primN = nil entonces 															//Si la lista de nuevos esta vacia entonces preguntamos si podemos mover algo de mem secundaria a principal
+    	Si espacio = verdadero entonces
+      	
+            
+   	Sino
+      multiprogramacion:= cant_proc_L + cant_proc_LS //asigno la cantidad de procesos en listos y listos y susp. a "multiprogramacion"
+      si (multiprogramacion < 5) entonces 
+        Mientras (multiprogramacion < 5) hacer 
+          si (cant_proc_L < 3) entonces //verifico que en la cola de listos hayan menos de 3 procesos 
+            si (cant_proc_LS > 0) entonces 
+              swap in de LS a L         //paso un proceso de listos y susp. a listos.
+              L.estado:= "listo"				//cambio el estado del proceso a "listo"
+            sino 
+              Ingreso de N a L //paso un proceso de nuevos a listos
+              L.estado:= "listo"
+            fs
+          sino 
+            si (cant_proc_LS <2)  enonces //en caso de que la cola de listos este a tope (3 procesos), verifico que la cola de listos y sup tenga menos de 2 procesos.
+              Ingreso de N a LS 	//paso un proceso de nuevos a listos y susp.
+              L.estado:= "listo"  //cambio el estado del proceso a "listo y suspendido"
+            fs
+          fs
+        fin mientras
+      sino //si la multiprogramacion ya alcanzo su tope (5 procesos)
+       si (cant_proc_L = 0) ^ (cant_proc_LS = 0) entonces // control de error par iteraciones donde la memoria principal y secundaria esten vacias.
+       	Tiempo_actual:= Tiempo_actual +1
+       sino // 
+       ....
+       fs
+      fs
+   	Fin si
+		
+	Fin Mientras
