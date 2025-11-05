@@ -32,7 +32,7 @@ AMBIENTE
     ant: puntero a procesos
   Fin registro
 
-  primE, primN, primL, primLS, primT, ult, E, N, L, L_S, T: puntero a procesos 				//No me acuerdo como funcionaba exactamente el pseudo pero pongo un prim y un puntero para cada lista segun su letra inicial 
+  primE, primN, primL, primLS, primT, ult, E, N, L, LS, T: puntero a procesos 				//No me acuerdo como funcionaba exactamente el pseudo pero pongo un prim y un puntero para cada lista segun su letra inicial 
 
   mem = registro de 							//Lista para facilitar muestra de tabla de memoria
     particion1: entero						//250kb
@@ -46,7 +46,7 @@ AMBIENTE
     ant: puntero a mem
   Fin registro
 
-  prim1, ult1, q: puntero a mem
+  primM, ult1, M: puntero a mem
 
   Procedimiento Cargar procesos en lista 	 														//Procedimientos para trabajo de listas
   Procedimiento para buscar en las listas 
@@ -54,21 +54,30 @@ AMBIENTE
   Procedimiento para ordenar lista de nuevos por tiempo de irrupcion 
   Procedimiento para ordenar lista de entrada por tiempo de arribo 
   
-  Funcion calculo_best_fit (A:entero):entero 													//El dato A que se ingresa es el tamaño del proceso
-    Si A <= 50 entonces
-     	calculo_best_fit:= 3 																						//Le corresponde la particion de 50kb
-    Sino
-      Si A <= 150 entonces
-      	calculo_best_fit:= 2 																					//le corresponde la particion de 150kb
-      Sino
-      	Si A <= 250 entonces
-        	calculo_best_fit:= 1  																		//Le corre4sponde la particion de 250kb
-        Sino
-        		calculo_best_fit:= 0 																		//significa que el proceso era demasiado grande para ser trabajado con nuestras particiones de memoria
-        Fin
-      Fin
-    Fin
-  Fin Funcion
+  Procedimiento carga_best_fit (X:puntero a procesos) 								//El dato ingresado es el puntero al nodo del cual nos interesa intentar ingresar a memoria principal segun las condiciones impuestas
+  	carga_hecha:= falso
+    Si (band3 = falso) y (carga_hecha = falso) entonces
+      Si *X.TAM <= 50 entonces 																				//Probamos primero con la particion de 50kb, si no puede prueba la de 150, y si no puede prueba la de 250.
+        Cargar proceso en lista de listos 														//se carga el proceso en lista de listos
+        band3:= true 																									//bandera se vuelve verdadera pq ese espacio de memoria esta ocupado ahora
+        carga_hecha:= true 
+      Fin si																												
+    Fin si
+    Si (band2 = falso) y (carga_hecha = falso) entonces								
+      Si *X.TAM <= 150 entonces
+        Cargar proceso en lista de listos
+        band2:= true
+        carga_hecha:= true
+      Fin si
+    Fin si
+    Si (band1 = falso) y (carga_hecha = falso) entonces
+      Si *X.TAM <= 250 entonces
+        Cargar proceso en lista de listos
+        band1:= true
+        carga_hecha:=true 
+      Fin si
+    Fin si
+  Fin procedimiento
           
   
   Tiempo_actual: entero  				//para poder calcular si corresponde o no que ingrese el proceso a lista de nuevos / memoria segun su tiempo de arribo.
@@ -79,26 +88,32 @@ AMBIENTE
   cant_proc_N: entero 					//contador de procesos para lista de nuevos
   cant_proc_L: entero						//contador de procesos para lista de listos
   cant_proc_LS: entero 					//contador de procesos para lista de listos/suspendidos
+  cant_proc_T: entero 			//contador de procesos en lista de terminados para poder calcular la cantidad de procesos que se ejecutaron en cierta cantidad de tiempo, es decir el promedio de trabajos realizados por unid de tiempo
   i: entero 										//controlador de ciclos Manejados por contador
   
   
-  Band: logico  	//Bandera para control de ciclo principal, donde al no quedar mas procesos que trabajar en ninguna lista (excepto de terminados) se termina el ciclo principal.
-  Band1: logico 	//Bandera para saber si el Particion 1 tiene un proceso adentro  
-  Band2: logico 	//Bandera para saber si el Particion 2 tiene un proceso adentro     
-  Band3: logico		//Bandera para saber si el Particion 3 tiene un proceso adentro 
-  espacio: logico //bandera para saber si habia algun espacio en memoria libre
+  finDeCargaMem: logico 		//Bandera para indicar que la verificiacion de multiprogramacion para la carga de procesos esta terminada
+  Band: logico  						//Bandera para control de ciclo principal, donde al no quedar mas procesos que trabajar en ninguna lista (excepto de terminados) se termina el ciclo principal.
+  Band1: logico 						//Bandera para saber si el Particion 1 tiene un proceso adentro  
+  Band2: logico 						//Bandera para saber si el Particion 2 tiene un proceso adentro     
+  Band3: logico							//Bandera para saber si el Particion 3 tiene un proceso adentro 
+  espacio: entero 					//Esta variable servira como control para determinar cual de las particiones esta libre en memoria principal para tratar de ingresar un proceso de mem.sec al usar el algoritmo best_fit
+  retorno_listaN_vacia?: logico //Esta variable sirve para volver a analizar los procesos restantes en caso de que la lista de entrada este vacia
+  carga_hecha: logico				//Esta variable nos permite controlar si se pudo realizar la carga de un proceso a memoria principal o no
   
 ACCION
 	Tiempo_actual:= 1 																			//Inicializacion de variables y contadores
   multiprogramacion:= 0
-  band:= falso 																						//banderas que si son falsas significa que esta vacia la particion
-  band1:= falso
+  band:= falso 																						//bandera que controla el ciclo principal
+  band1:= falso 																					//banderas que si son falsas significa que esta vacia la particion
   band2:= falso
   band3:= falso
-  espacio:= verdadero
+  finDeCargaMem:= falso
   cant_proc_N:= 0
   cant_proc_L:= 0
   cant_proc_LS:= 0
+  cant_proc_T:= 0
+  retorno_listaN_vacia?:= falso
   
   Abrir E/S (Archivo) 																		//Abrimos y leemos archivo de entrada
   Leer (Arch,reg)
@@ -111,49 +126,201 @@ ACCION
   Procedimiento ordenar lista de entrada por tiempo de arribo 		//Ordenamos lista de entrada
   
   Mientras band = falso hacer
-  
-  	Para i:=1 hasta cantidad_procesos hacer  							//controlamos todos los procesos de la lista de entrada para determinar si corresponde su entrada a memoria o no
-    	E:= PrimE
-    	Si *E.TA = Tiempo_actual entonces
-    		Procedimiento Cargar proceso en lista de nuevos
-        Cambiar el estado a nuevo 
-         Procedimiento Borrar proceso de lista de entrada
-        E:= *E.prox
-        cant_proc_E:= cant_proc_E - 1
-        cant_porc_N:= cant_proc_N + 1
-      fin Si  
-    Fin para
+  	Si restorno_lista_vacia? = falso entonces
+      Para i:=1 hasta cantidad_procesos hacer  							//controlamos todos los procesos de la lista de entrada para determinar si corresponde su entrada a memoria o no
+        E:= PrimE
+        Si *E.TA = Tiempo_actual entonces
+          Procedimiento Cargar proceso en lista de nuevos
+          Cambiar el estado a nuevo 
+           Procedimiento Borrar proceso de lista de entrada
+          E:= *E.prox
+          cant_proc_E:= cant_proc_E - 1
+          cant_porc_N:= cant_proc_N + 1
+        fin Si  
+      Fin para
+    Fin si
     
   	Si primN = nil entonces 															//Si la lista de nuevos esta vacia entonces preguntamos si podemos mover algo de mem secundaria a principal
-    	Si espacio = verdadero entonces
-      	
-            
+    	Si cant_proc_L < 3 entonces 												//El orden de prioridad a seguir es que ingresa el proceso de mem secund que haya llegado antes a memoria secundaria. Si el TM es igual para ambos ingresa el de menor TI. Si el TI es igual en ambos procesos entonces entra arbitrariamente 1 de los 2.
+        Si primLS <> nil entonces 												//Significa que la cola de listo/suspendido no esta vacia
+          LS:= primLS 																		
+          Si *LS.prox <> nil entonces 										//Significa que la cola de listo/suspendido tiene 2 procesos por lo que haremos 2 intentos para ingresarlos a memoria principal
+            Si *LS.TM < *LS.prox.TM entonces							//Arranca la comparacion entre los 2 procesos
+              primLS:= *LS.prox
+              carga_best_fit(LS)
+              Si carga_hecha = true entonces 							//En caso de que la carga haya sido realizada con exito entonces modificamos los contadores de las respectivas listas y las mismas listas en si eliminando los procesos movidos
+              	cant_proc_LS:=cant_proc_LS - 1
+        				cant_proc_L:= cant_proc_L + 1
+                Borrar proceso de lista de listos/suspendidos
+              Fin si
+            Sino
+              Si *LS.TM > *LS.prox.TM entonces
+                carga_best_fit(LS.prox)
+                Si carga_hecha = true entonces
+              		cant_proc_LS:=cant_proc_LS - 1
+        					cant_proc_L:= cant_proc_L + 1
+                  Borrar proceso de lista de listos/suspendidos
+              	Fin si
+              Sino
+                Si *LS.TI <= *LS.prox.TI entonces
+                  primLS:= *LS.prox
+                  carga_best_fit(LS)
+                  Si carga_hecha = true entonces
+              			cant_proc_LS:=cant_proc_LS - 1
+        						cant_proc_L:= cant_proc_L + 1
+                    Borrar proceso de lista de listos/suspendidos
+              		Fin si
+                Sino
+                  Si *LS.TM > *LS.prox.TM entonces
+                    carga_best_fit(LS.prox)
+                    Si carga_hecha = true entonces
+              				cant_proc_LS:=cant_proc_LS - 1
+        							cant_proc_L:= cant_proc_L + 1
+                      Borrar proceso de lista de listos/suspendidos
+              			Fin si
+                  Fin si
+                Fin si
+              Fin si
+            Fin si 																			//Hasta aca llega la comparacion entre los procesos para ver cual tiene prioridad para entrar y se intento realizar la 1er carga
+						LS:= primLS
+            carga_best_fit(LS) 													//Ahora que primLS apunta al proceso restante en cola de listo/suspendido se intenta hacer la carga del segundo proceso a mem pricipal
+            Si carga_hecha = true entonces
+              cant_proc_LS:=cant_proc_LS - 1
+        			cant_proc_L:= cant_proc_L + 1
+              Borrar proceso de lista de listos/suspendidos
+            Fin si
+          Sino
+          	carga_best_fit(LS) 													//habia un solo proceso por lo que se intenta hacer la carga de dicho proceso a mem principal
+            Si carga_hecha = true entonces
+            	cant_proc_LS:=cant_proc_LS - 1
+        			cant_proc_L:= cant_proc_L + 1
+              Borrar proceso de lista de listos/suspendidos
+            Fin si
+          Fin si
+        Fin si
+      Fin si   	
+      finDeCargaMem:= verdadero 												//Ya sea pq la memoria principal ya tiene 3 procesos, o pq la memoria secundaria esta vacia, o porque se realizaron/fallaron las diferentes cargas, pasamos a la siguiente etapa del codigo
    	Sino
-      multiprogramacion:= cant_proc_L + cant_proc_LS //asigno la cantidad de procesos en listos y listos y susp. a "multiprogramacion"
-      si (multiprogramacion < 5) entonces 
+      multiprogramacion:= cant_proc_L + cant_proc_LS 				//asigno la cantidad de procesos en listos y listos y susp. a "multiprogramacion"
+      si (multiprogramacion < 5) entonces  									//Verificacion de multiprogramacion, si es menor a 5 entonces podemos ingresar mas procesos a memoria princip o secund
         Mientras (multiprogramacion < 5) hacer 
-          si (cant_proc_L < 3) entonces //verifico que en la cola de listos hayan menos de 3 procesos 
+          si (cant_proc_L < 3) entonces 										//verifico que en la cola de listos hayan menos de 3 procesos 
             si (cant_proc_LS > 0) entonces 
-              swap in de LS a L         //paso un proceso de listos y susp. a listos.
-              L.estado:= "listo"				//cambio el estado del proceso a "listo"
+              //swap in de LS a L        											 //paso un proceso de listos y susp. a listos.
+              caraga_best_fit()
+              Si carga_hecha = true entonces
+              	Borrar proceso de lista de listos/suspendidos
+              	cant_proc_LS:=cant_proc_LS - 1
+        				cant_proc_L:= cant_proc_L + 1
+              Fin si
+               //cambiar estado a "listo"														//cambio el estado del proceso a "listo"
             sino 
-              Ingreso de N a L //paso un proceso de nuevos a listos
-              L.estado:= "listo"
+              //Ingreso de N a L 																		//paso un proceso de nuevos a listos
+              caraga_best_fit()                            //la eliminacion del proceso no se hace en lista de LS sino que se hace en lista de nuevos, habria que modificar el procedimiento o hacer otro
+              Si carga_hecha = true entonces
+              	Borrar proceso de lista de nuevos
+              	cant_proc_N:=cant_proc_N - 1
+        				cant_proc_L:= cant_proc_L + 1
+              Fin si
+                
+              //cambiar estado a "listo"
             fs
           sino 
-            si (cant_proc_LS <2)  enonces //en caso de que la cola de listos este a tope (3 procesos), verifico que la cola de listos y sup tenga menos de 2 procesos.
-              Ingreso de N a LS 	//paso un proceso de nuevos a listos y susp.
-              L.estado:= "listo"  //cambio el estado del proceso a "listo y suspendido"
+            si (cant_proc_LS <2)  enonces 													//en caso de que la cola de listos este a tope (3 procesos), verifico que la cola de listos y sup tenga menos de 2 procesos.
+              Ingreso de N a LS 															//paso un proceso de nuevos a listos y susp.
+              cant_proc_N:=cant_proc_N - 1
+        			cant_proc_LS:= cant_proc_L + 1
+              //cambiar estado a "listo y susp."
+            sino
+            	finDeCargaMem:=verdadero
             fs
           fs
         fin mientras
-      sino //si la multiprogramacion ya alcanzo su tope (5 procesos)
-       si (cant_proc_L = 0) ^ (cant_proc_LS = 0) entonces // control de error par iteraciones donde la memoria principal y secundaria esten vacias.
-       	Tiempo_actual:= Tiempo_actual +1
-       sino // 
-       ....
-       fs
+      sino 																																		//si la multiprogramacion ya alcanzo su tope (5 procesos) entonces no podemos agregar nada a ninguna memoria por lo que seguimos con el analsisis
+      	finDeCargaMem:= verdadero
+      Fin si
+      	si finDeCargaMem entonces 
+         si (cant_proc_L <> 0) entonces 												// control de error par iteraciones donde la memoria principal esta vacias.
+     																																			//al no estar vacia se sigue analizando con el algoritmo strf para determinar que proceso debe ejecutarse
+          Para i:= 1 hasta 3 hacer 																									//se busca el prceso que tenga menor tiempo de interrupcion para mandarlo a ejecutarce 
+            Si (*L.TI < LV) Entonces 
+              *M. := *L 
+              *M.Estado := "Ejecuctando"
+              *M.Frag := (*M.Par - *L.TAM)
+              L := *L.prox 
+            Fin_ Si 
+					Fin_Para 
+          
+          Si (*M.TI = 0) entonces 																					//Pregunta si termono el proceso, si termono se lo manda a la lista de terminados y se cambia su estado 
+          	Procedimeinto mandar a terminados 
+            *M.Estado := "Terminados" 
+            Procedieminto eliminar 
+          Sino 
+            Procedimeinto Mostrar                                     //Muestra por pantalla la lista de como queda la de terminados y la de listos 
+         	Fin_Si 	
+        fs
+        finDeCargaMem:= falso
+        Tiempo_actual:= Tiempo_actual +1
+        si (cant_proc_E = 0) entonces
+        	Band:= Verdadero
+          Si band = verdadero entonces
+            si (cant_proc_L = 0) entonces               												//calculo estadisticas y muesrto informe final (tiempo de retorno y espera promedios. Cantidad de trabajos terminados por unidad de tiempo)
+              Tiempo_Espera_prom: Tiempo_Espera_prom / cant_proc_E
+              Tiempo_Retorno_prom: Tiempo_retorno_prom / cant_proc_E
+              cant_proc_T:= cant_proc_T / Tiempo_actual
+            sino
+            	band:= falso 																											//Permitimos volver a empezar el ciclo pq no se termino de analizar todos los procesos
+              retorno_listaN_vacia?:= true
+            fs
+          fs
+        fs
       fs
-   	Fin si
-		
+    fs
+    
 	Fin Mientras
+  
+  Ideas: DE MAURI
+  	If (*N.TA == TA) 
+      If (Tamaño Proceso > 250) entonces                                    //Pregunta si el tamaño de mmemoria es muy grande para entrar en las particiones 
+        Print("El proceso", ID "es demaciado grande para ser ejecutado")
+        Print("Por lo tanto se lo eliminara")
+        Procesdiemiento Eliminar()
+      else 
+        If (Tamaño Proceso <= 50 and Band1 == True) Entonces 							//Pregunta si puede entrar en la particion N1, si entra en el proceso se incremente el contado Multiprogramacion 
+          *L.Par1 := "Proceso" *E.ID *E.TAM 
+          *L.Frag1 := (50 - *E.TAM) 
+          Multiprogramacion:=  Multiprogramacion + 1
+         Band1 = False 
+        else 
+          If (Tamaño Proceso <= 150 and Band2 == True) Entonces 				//Pregunta si puede entrar en la particion N2, si entra en el proceso se incremente el contado Multiprogramacion 
+            *L.Par2 := "Proceso" *E.ID *E.TAM 
+            *L.Frag2 := (150 - *E.TAM) 
+            Multiprogramacion:=  Multiprogramacion + 1 
+           	Band2 = False 
+          else  																													//Pregunta si puede entrar en la particion N3, si entra en el proceso se incremente el contado Multiprogramacion 
+            If (Tamaño Proceso <= 250 and Band3 == True) 
+              *L.Par3 := "Proceso" *E.ID *E.TAM 
+              *L.Frag3 := (250 - *E.TAM) 
+              Multiprogramacion:=  Multiprogramacion + 1
+              Band3 = False 
+            FS
+          FS
+        FS 
+      FS
+    FS 
+    
+    Nuevo(LS)                                         //Cargo 2 procesos en lista de Listos Y suspendidos 
+    LS = Prim 
+    Prim = L 
+    Multiprogramacion:=  Multiprogramacion + 1
+    Nuevo(LS)
+    L = *L.Prox
+    *Prim.Prox =  LS
+    *LS.Prox := nil
+    LS := L
+    Multiprogramacion:=  Multiprogramacion + 1
+    
+    
+    If (Multiprogramacion == 5) 
+    	Print("Espacios de memoria llenos")
+    FS
