@@ -2,10 +2,10 @@ PSEUDOCODIGO //para mandarle al chat que traduszca todo a python
 AMBIENTE
 	
   registro= registro de
-  	ID: entero
-    TAM: entero
-    TA: entero
-    TI: entero
+  	ID: entero                    //ID del proceso
+    TAM: entero                   //tamaño  
+    TA: entero                     //Tiempo de arribo
+    TI: entero                    //Tiempo de irrupcion
   Fin registro
 	Archivo: Archivo de reg 				//Archivo de entrada en formato csv
   reg: registro
@@ -22,68 +22,203 @@ AMBIENTE
     TA: entero 										//Tiempo de arribo
     TI: entero 										//Tiempo de irrupcion
     TAM: entero										//Tamaño de proceso
-    ESTADO: AN(30)
+    ESTADO: ("Nuevo", "Listo", "Listo y suspendido", "Ejecutando", "Terminado")
     TF: entero  									//Tiempo de finalizacion
-    TM: entero 										//Tiempo de ingreso a memoria   (TF y TM para calculo de tiempo de espera y eso)
-    TE: entero										//Tiempo de espera del proceso 
-    TR: entero 										//Tiempo de retorno del proceso
-    best_fit_part: entero 				//Variable para almacenar a que particion le corresponde su futura asignacion basandose en el best fit a partir de algun calculo matematico
+    TM: entero 										//Tiempo de ingreso a memoria principal   (TF y TM para calculo de tiempo de espera y eso)
+    TE: entero										//Tiempo de espera del proceso (Tiempo en cola de listos)
+    TR: entero 										//Tiempo de retorno del proceso  (Tiempo entre listos y ejecucion)
     prox: puntero a procesos
     ant: puntero a procesos
   Fin registro
 
-  primE, primN, primL, primLS, primT, ult, E, N, L, LS, T: puntero a procesos 				//No me acuerdo como funcionaba exactamente el pseudo pero pongo un prim y un puntero para cada lista segun su letra inicial 
+  primE, primN, primL, primLS, primT, ultE, ultN, ultL, ultLS, ultT, E1,E2, N1,N2 , L1, L2, LS1, LS2, T1, T2: puntero a procesos //No me acuerdo como funcionaba exactamente el pseudo pero pongo un prim y un puntero para cada lista segun su letra inicial 
 
   mem = registro de 							//Lista para facilitar muestra de tabla de memoria
-    particion1: entero						//250kb
-    fragmentacion1: entero
-    particion2: entero 						//150kb
-    fragmentacion2: entero
-    particion3: entero 						//50kb
-    fragmentacion3: entero
-    particion4: "SO"
+    particion: (0,1,2,3)						  //id
+    dir_inicio: entero
+    tamaño:(250, 150, 50, 100)
+    contenido: AN(30)          //Proceso que tiene asignado o sistema operativo
+    fragmentacion: entero
     prox: puntero a mem
     ant: puntero a mem
   Fin registro
 
   primM, ult1, M: puntero a mem
+  
+  
+  Procedimiento Cargar_entrada(primX,ultX:puntero a procesos)       //Cargamos la lista de entrada con los procesos del archivo ordenando segun tiempo de arribo de menor a mayor
+  AMBIENTE
+    X1: puntero a procesos
+    X2: puntero a procesos
+  Accion    
+    Abrir (Arch)
+    Leer(Arch,reg)
+    Mientras NFDA(Arch) hacer
+      Nuevo X1                                  //Puntero nuevo a agregar
+      X2:= primX
+      X1.ID:= reg.ID
+      X1.TA:= reg.TA
+      X1.TI:= reg.TI
+      X1.TAM:= reg.TAM
+      X1.ESTADO:= "Nuevo"    
+      X1.TF:= 0             
+      X1.TM:= 0                       
+      X1.TE:= 0             
+      X1.TR:= 0             
 
-  Procedimiento Cargar procesos en lista 	 														//Procedimientos para trabajo de listas
+      Si primX = Nil entonces      //Si la lista esta vacia se carga en primer u ultimo lugar el proceso
+        primX:= X1
+        ult.X:= X1
+        X1.prox:= nil
+        X1.ant:= nil     
+      Sino                                  //Si la lista no esta vacia entonces hacemos la comparacion
+        Mientras X1.TA > X2.TA y X2 <> nil entonces     //Recorremos la lista comparando segun el TA de menor a mayor 
+          X1.ant:= X2
+          X2:= X2.prox
+        Fin mientras
+        Si X2 <> nil entonces               //Si no llegamos al final de la lista entonces trabajamos al principio o en el medio
+          Si X1.TA = X2.TA entonces         //Si los TA son iguales, el proceso que esta en memoria tiene prioridad(X2) y cargamos a su derecha el proceso entrante(X1)
+            X1.prox:= X2.prox
+            X1.ant:= X2
+            X2.prox.ant:= X1
+            X2.prox:= X1
+            Si X2 = ultX entonces           //Como cargamos a derecha de X2 entonces no es necesario pregunbtar si X2 es prim, pq no va a variar
+              ultX:= X1
+            Fin si
+          Sino
+            X1.prox:= X2                    //Si el TA de X1(proceso a cargar) es menor entonces lo cargamos a izquierda de X2(proceso existente)
+            X1.ant:= X2.ant
+            X2.ant.prox:= X1
+            X2.ant:= X1
+            Si X2 = primX entonces          //Como cargamos a izquierda de X2 entonces no es necesario pregunbtar si X2 es ult, pq no va a variar
+              primX:= X1
+            Fin si
+          Fin si
+        Sino
+          ultX.prox:= X1
+          X1.ant:= ultX.ant
+          ultX:= X1
+        Fin si
+      Fin si
+      Leer(Arch)
+    Fin mientras
+    Cerrar(Arch)
+  Fin procedimiento
+
+
+
+  Procedimiento Cargar_procesos en lista(primX,ultX, Y: puntero a procesos; estado: ("Nuevo", "Listo", "Listo y suspendido", "Ejecutando", "Terminado")) //Estado cambia segun la lista, lo demas se mantiene
+   	 														              //Cargamos procdimiento en lista a partir de otra lista
+  AMBIENTE
+    X1: puntero a procesos
+    X2: puntero a procesos
+  ACCION
+    Nuevo X1                                  //Puntero nuevo a agregar
+    X2:= primX                                //puntero usado para recorrer la lista y comparar
+    X1.ID:= Y.ID                              //Cargamos primeros datos a partir de la lista de la que provienen los procesos (Y puntero que apunta al proceso a cargar)
+    X1.TA:= Y.TA
+    X1.TI:= Y.TI
+    X1.TAM:= Y.TAM
+    X1.ESTADO:= estado          
+    X1.TF:= Y.TF             
+    X1.TM:= Y.TM            
+    X1.TE:= Y.TE             
+    X1.TR:= Y.TR            
+    
+    Si primX = Nil entonces      //Si la lista esta vacia se carga en primer u ultimo lugar el proceso
+      primX:= X1
+      ult.X:= X1
+      X1.prox:= nil
+      x1.ant:= nil
+    Sino                                  //Si la lista no esta vacia entonces hacemos la comparacion
+      Mientras X1.TI > X2.TI y X2 <> nil entonces     //Recorremos la lista comparando segun el TI de menor a mayor 
+        X1.ant:= X2
+        X2:= X2.prox
+      Fin mientras
+      Si X2 <> nil entonces               //Si no llegamos al final de la lista entonces trabajamos al principio o en el medio
+        Si X1.TI = X2.TI entonces         //Si los TI son iguales, el proceso que esta en memoria tiene prioridad(X2) y cargamos a su derecha el proceso entrante(X1)
+          X1.prox:= X2.prox
+            X1.ant:= X2
+            X2.prox.ant:= X1
+            X2.prox:= X1
+            Si X2 = ultX entonces           //Como cargamos a derecha de X2 entonces no es necesario pregunbtar si X2 es prim, pq no va a variar
+              ultX:= X1
+            Fin si
+          Sino
+            X1.prox:= X2                    //Si el TI de X1(proceso a cargar) es menor entonces lo cargamos a izquierda de X2(proceso existente)
+            X1.ant:= X2.ant
+            X2.ant.prox:= X1
+            X2.ant:= X1
+            Si X2 = primX entonces          //Como cargamos a izquierda de X2 entonces no es necesario pregunbtar si X2 es ult, pq no va a variar
+              primX:= X1
+            Fin si
+        Fin si
+      Sino                                //cargamos al final directamente
+        ultX.prox:= X1
+        X1.ant:= ultX.ant
+        ultX:= X1
+      Fin si
+    Fin si    
+  Fin procedimiento
+
+  Procedimiento Borrar procesos de lista(Y, primX, ultX: puntero a procesos)    //eliminamos proceso de una lista
+    Si primX = Y entonces                   //Si era el primer proceso
+      primX.= Y.prox
+      Y.prox.ant:= nil
+      eliminar Y
+    Sino
+      Si ultX = Y entonces                  //Si era el ultimo
+        ultX:= Y.ant
+        Y.ant.prox:= nil
+        eliminar Y
+      Sino
+        Y.ant.prox:= Y.prox                 //Si estaba en el medio de la lista
+        Y.prox.ant:= Y.ant
+        eliminar Y
+      Fin si
+    Fin si
+  Fin procedimiento
+
+
   Procedimiento para buscar en las listas 
-  Procedimiento Borrar procesos de lista 
-  Procedimiento para ordenar lista de nuevos por tiempo de irrupcion 
-  Procedimiento para ordenar lista de entrada por tiempo de arribo 
+ 
   
   Procedimiento carga_best_fit (X:puntero a procesos) 								//El dato ingresado es el puntero al nodo del cual nos interesa intentar ingresar a memoria principal segun las condiciones impuestas
   	carga_hecha:= falso
-    Si (band3 = falso) y (carga_hecha = falso) entonces
-      Si *X.TAM <= 50 entonces 																				//Probamos primero con la particion de 50kb, si no puede prueba la de 150, y si no puede prueba la de 250.
-        Cargar proceso en lista de listos 														//se carga el proceso en lista de listos
-        band3:= true 																									//bandera se vuelve verdadera pq ese espacio de memoria esta ocupado ahora
-        carga_hecha:= true 
-      Fin si																												
-    Fin si
-    Si (band2 = falso) y (carga_hecha = falso) entonces								
-      Si *X.TAM <= 150 entonces
-        Cargar proceso en lista de listos
-        band2:= true
-        carga_hecha:= true
+    Si X*TAM <= 250 y X*TAM > 0 entonces
+      Si (band3 = falso) y (carga_hecha = falso) entonces
+        Si *X.TAM <= 50 entonces 																				//Probamos primero con la particion de 50kb, si no puede prueba la de 150, y si no puede prueba la de 250.
+          Cargar proceso en lista de listos 														//se carga el proceso en lista de listos
+          band3:= true 																									//bandera se vuelve verdadera pq ese espacio de memoria esta ocupado ahora
+          carga_hecha:= true 
+        Fin si																												
       Fin si
-    Fin si
-    Si (band1 = falso) y (carga_hecha = falso) entonces
-      Si *X.TAM <= 250 entonces
-        Cargar proceso en lista de listos
-        band1:= true
-        carga_hecha:=true 
+      Si (band2 = falso) y (carga_hecha = falso) entonces								
+        Si *X.TAM <= 150 entonces
+          Cargar proceso en lista de listos
+          band2:= true
+          carga_hecha:= true
+        Fin si
       Fin si
+      Si (band1 = falso) y (carga_hecha = falso) entonces
+        Si *X.TAM <= 250 entonces
+          Cargar proceso en lista de listos
+          band1:= true
+          carga_hecha:=true 
+        Fin si
+      Fin si
+    Sino
+      Print("El proceso", ID "es demasiado grande para ser ejecutado por lo tanto sera eliminado")
+      Procediemiento Borrar procesos de lista
     Fin si
   Fin procedimiento
           
   
   Tiempo_actual: entero  				//para poder calcular si corresponde o no que ingrese el proceso a lista de nuevos / memoria segun su tiempo de arribo.
   multiprogramacion: entero   	//para control de si se alcanzo un grado de multiprogramacion igual a 5 o no.
-  Tiempo_Espera_prom: entero 	 	// tiempoDeRetorno - TI
-  Tiempo_Retorno_prom: entero 	// tiempoDeFinalizacion - TM
+  Tiempo_Espera_prom: real 	 	// tiempoDeRetorno - TI
+  Tiempo_Retorno_prom: real 	// tiempoDeFinalizacion - TM
+  Rendimiento: real           // cantidad de trabajos terminados por unidad de tiempo
   cant_proc_E: entero 					//Contador para saber cuantos procesos hay en la lista de entrada y asi poder calcular los promedios (en python capaz no es necesario)
   cant_proc_N: entero 					//contador de procesos para lista de nuevos
   cant_proc_L: entero						//contador de procesos para lista de listos
@@ -119,8 +254,9 @@ ACCION
   Leer (Arch,reg)
   
   Mientras NFDA(Arch) hacer 
-  	Procedimiento Cargar procesos en lista de entrada 		//Cargamos lista de entrada, aca usamos la funcion "calculo_best_fit" por ejemplo, y todo lo necesario para cargar los datos de cada proceso
+  	Procedimiento_Cargar procesos en lista de entrada 		//Cargamos lista de entrada, aca usamos la funcion "calculo_best_fit" por ejemplo, y todo lo necesario para cargar los datos de cada proceso
     cant_proc_E:=cant_proc_E + 1.
+    Leer(Arch,reg)
   Fin mientras
   
   Procedimiento ordenar lista de entrada por tiempo de arribo 		//Ordenamos lista de entrada
@@ -130,7 +266,7 @@ ACCION
       Para i:=1 hasta cantidad_procesos hacer  							//controlamos todos los procesos de la lista de entrada para determinar si corresponde su entrada a memoria o no
         E:= PrimE
         Si *E.TA = Tiempo_actual entonces
-          Procedimiento Cargar proceso en lista de nuevos
+          Procedimiento_Cargar proceso en lista de nuevos
           Cambiar el estado a nuevo 
            Procedimiento Borrar proceso de lista de entrada
           E:= *E.prox
@@ -216,7 +352,7 @@ ACCION
                //cambiar estado a "listo"														//cambio el estado del proceso a "listo"
             sino 
               //Ingreso de N a L 																		//paso un proceso de nuevos a listos
-              caraga_best_fit()                            //la eliminacion del proceso no se hace en lista de LS sino que se hace en lista de nuevos, habria que modificar el procedimiento o hacer otro
+              caraga_best_fit()                                 //la eliminacion del proceso no se hace en lista de LS sino que se hace en lista de nuevos, habria que modificar el procedimiento o hacer otro
               Si carga_hecha = true entonces
               	Borrar proceso de lista de nuevos
               	cant_proc_N:=cant_proc_N - 1
@@ -262,29 +398,25 @@ ACCION
         finDeCargaMem:= falso
         Tiempo_actual:= Tiempo_actual +1
         si (cant_proc_E = 0) entonces
-        	Band:= Verdadero
-          Si band = verdadero entonces
-            si (cant_proc_L = 0) entonces               												//calculo estadisticas y muesrto informe final (tiempo de retorno y espera promedios. Cantidad de trabajos terminados por unidad de tiempo)
-              Tiempo_Espera_prom: Tiempo_Espera_prom / cant_proc_E
-              Tiempo_Retorno_prom: Tiempo_retorno_prom / cant_proc_E
-              cant_proc_T:= cant_proc_T / Tiempo_actual
-            sino
-            	band:= falso 																											//Permitimos volver a empezar el ciclo pq no se termino de analizar todos los procesos
-              retorno_listaN_vacia?:= true
-            fs
+        	band:= Verdadero
+          si (cant_proc_L = 0) entonces               												//calculo estadisticas y muesrto informe final (tiempo de retorno y espera promedios. Cantidad de trabajos terminados por unidad de tiempo)
+            Tiempo_Espera_prom: Tiempo_Espera_prom / cant_proc_E
+            Tiempo_Retorno_prom: Tiempo_retorno_prom / cant_proc_E
+            Rendimiento:= cant_proc_T / Tiempo_actual
+          sino
+            band:= falso 																											//Permitimos volver a empezar el ciclo pq no se termino de analizar todos los procesos
+            retorno_listaN_vacia?:= true
           fs
         fs
       fs
-    fs
-    
+    fs    
 	Fin Mientras
   
   Ideas: DE MAURI
   	If (*N.TA == TA) 
       If (Tamaño Proceso > 250) entonces                                    //Pregunta si el tamaño de mmemoria es muy grande para entrar en las particiones 
-        Print("El proceso", ID "es demaciado grande para ser ejecutado")
-        Print("Por lo tanto se lo eliminara")
-        Procesdiemiento Eliminar()
+        Print("El proceso", ID "es demasiado grande para ser ejecutado por lo tanto sera eliminado")
+        Procediemiento Eliminar()
       else 
         If (Tamaño Proceso <= 50 and Band1 == True) Entonces 							//Pregunta si puede entrar en la particion N1, si entra en el proceso se incremente el contado Multiprogramacion 
           *L.Par1 := "Proceso" *E.ID *E.TAM 
@@ -324,3 +456,7 @@ ACCION
     If (Multiprogramacion == 5) 
     	Print("Espacios de memoria llenos")
     FS
+
+
+    //Para calcular la fragmentacion interna vamos a tener que hacer el tamañp de la particion - tamaño del proceso que se encuentra en ella por lo que vamos a necesitar...
+    //...una funcion que convierta el contenido de la particion (id de proceso en alfanumerico) a numero y asi buscar ese proceso en listo o listo y suspendido y obtener TAM.
