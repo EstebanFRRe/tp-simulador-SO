@@ -1,0 +1,201 @@
+// Memoria (Solo particiones de usuario, el OS de 100k es implícito)
+MEMORIA = Lista de 3 Objetos Particion:
+    [ {ID:1, Tam:50}, {ID:2, Tam:150}, {ID:3, Tam:250} ] 
+
+// Listas de Estado
+Lista_Entrada     // Procesos leídos del archivo (aún no llegaron por tiempo)
+Lista_Nuevos      // Llegaron (TA == Reloj) pero esperan cupo de multiprogramación
+Lista_Listos      // En RAM, esperando CPU
+Lista_Suspendidos // En Disco (Listo y Suspendido), esperando RAM
+Lista_Terminados  // Finalizados
+
+// Variables de Control
+Reloj: Entero = 0
+Grado_Multiprog_Actual: Entero = 0  // Cantidad actual en (Listos + Suspendidos + Ejecutando)
+Proceso_Ejecutando: Objeto Proceso (o NULL)
+
+CLASE Proceso:
+    ID: Entero
+    TAM: Entero          // Tamaño en KB
+    TA: Entero           // Tiempo de Arribo
+    TI_Total: Entero     // Tiempo de Irrupción Total (Dato original)
+    TI_Restante: Entero  // Contador regresivo (Para SRTF)
+    Estado: Texto        // "Nuevo", "Listo", "Suspendido", "Ejecutando", "Terminado"
+    Particion_ID: Entero // 1, 2, 3 o NULL (si está en disco/nuevo/terminado)
+    
+    // Variables para Estadísticas Finales
+    T_Llegada_Sistema: Entero // Igual a TA
+    T_Finalizacion: Entero    // Cuando termina de ejecutar
+    // Nota: 
+    // TR (Retorno) = T_Finalizacion - T_Llegada_Sistema
+    // TE (Espera)  = TR - TI_Total
+
+CLASE Particion:
+    ID: Entero           // 1, 2, 3
+    Tam_Max: Entero      // 50, 150, 250
+    Ocupada: Booleano
+    Proceso_Asignado: Entero // ID del proceso ocupante o NULL
+    Frag_Interna: Entero     // Desperdicio calculado
+
+FUNCION Cargar_Datos(Archivo):
+    Leer todas las filas del Archivo en una lista temporal 'Filas'
+    
+    // --- VALIDACIÓN DE CANTIDAD ---
+    Si Contar(Filas) > 10 Entonces:
+        Mostrar "ALERTA: Hay más de 10 procesos. Se descartan los excedentes."
+        Filas = Tomar_Primeros_10(Filas)
+    Fin Si
+    // -----------------------------
+
+    Para cada fila en Filas:
+        Crear Objeto P (ID, TAM, TA, TI)
+        P.TI_Total = TI
+        P.TI_Restante = TI
+        P.Estado = "Nuevo"
+        Agregar P a Lista_Entrada
+
+    Ordenar Lista_Entrada por TA (ascendente)
+FIN FUNCION
+
+FUNCION Intentar_Cargar_Best_Fit(Proceso P) RETORNA Booleano:
+    Candidata = NULL
+    Min_Desperdicio = 999999
+    
+    // Recorrer particiones para buscar el mejor hueco
+    Para cada Part en MEMORIA:
+        Si (Part.Ocupada == FALSO) Y (Part.Tam_Max >= P.TAM):
+            Desperdicio = Part.Tam_Max - P.TAM
+            
+            Si Desperdicio < Min_Desperdicio:
+                Min_Desperdicio = Desperdicio
+                Candidata = Part
+            Fin Si
+        Fin Si
+    Fin Para
+
+    // Si encontramos lugar
+    Si Candidata != NULL:
+        Candidata.Ocupada = VERDADERO
+        Candidata.Proceso_Asignado = P.ID
+        Candidata.Frag_Interna = Min_Desperdicio
+        P.Particion_ID = Candidata.ID
+        RETORNAR VERDADERO
+    Sino:
+        RETORNAR FALSO
+    Fin Si
+FIN FUNCION
+
+INICIO
+
+    Cargar_Datos("archivo_procesos.csv")
+    Total_Procesos = Contar(Lista_Entrada)
+
+    // Bucle principal: Sigue hasta que todos estén terminados
+    MIENTRAS (Contar(Lista_Terminados) < Total_Procesos) HACER:
+
+        // -----------------------------------------------------
+        // PASO 1: LLEGADAS (Entrada -> Nuevos)
+        // -----------------------------------------------------
+        Mientras (Lista_Entrada no vacía) Y (Lista_Entrada[0].TA == Reloj):
+            P = Sacar_Primero(Lista_Entrada)
+            Agregar P a Lista_Nuevos
+        Fin Mientras
+
+        // -----------------------------------------------------
+        // PASO 2: ADMISIÓN LTS (Nuevos -> Listos o Suspendidos)
+        // Solo si hay cupo en el sistema (Max 5)
+        // -----------------------------------------------------
+        Mientras (Lista_Nuevos no vacía) Y (Grado_Multiprog_Actual < 5):
+            P = Sacar_Primero(Lista_Nuevos)
+            
+            // Intento meterlo a RAM
+            Si Intentar_Cargar_Best_Fit(P) == VERDADERO:
+                P.Estado = "Listo"
+                Agregar P a Lista_Listos
+            Sino:
+                // Si no entra, va a disco
+                P.Estado = "Suspendido"
+                Agregar P a Lista_Suspendidos
+            Fin Si
+            
+            Grado_Multiprog_Actual = Grado_Multiprog_Actual + 1
+        Fin Mientras
+
+        // -----------------------------------------------------
+        // PASO 3: SWAPPING MTS (Suspendidos -> Listos)
+        // Revisamos si se liberó RAM para alguien del disco
+        // -----------------------------------------------------
+        Para cada S en Lista_Suspendidos:
+            Si Intentar_Cargar_Best_Fit(S) == VERDADERO:
+                Sacar S de Lista_Suspendidos
+                S.Estado = "Listo"
+                Agregar S a Lista_Listos
+                // Nota: Sigue contando en multiprogramación, no cambia el grado
+            Fin Si
+        Fin Para
+
+        // -----------------------------------------------------
+        // PASO 4: PLANIFICACIÓN STS (SRTF)
+        // Elegimos quién usa la CPU ahora
+        // -----------------------------------------------------
+        // Buscamos el proceso con menor TI_Restante entre (Listos + Ejecutando)
+        
+        Candidato = Proceso_Ejecutando
+        Si Candidato == NULL O Candidato.Estado == "Terminado":
+             Candidato = NULL // Necesitamos uno nuevo
+        
+        // Comparamos contra todos los listos
+        Para cada L en Lista_Listos:
+            Si Candidato == NULL:
+                Candidato = L
+            Sino Si L.TI_Restante < Candidato.TI_Restante:
+                Candidato = L
+            Fin Si
+        Fin Para
+
+        // Cambio de Contexto (Si el candidato es distinto al que venía ejecutando)
+        Si Candidato != Proceso_Ejecutando Y Candidato != NULL:
+            // Si había uno ejecutando y no terminó, vuelve a listos (Expropiación)
+            Si Proceso_Ejecutando != NULL Y Proceso_Ejecutando.Estado != "Terminado":
+                Proceso_Ejecutando.Estado = "Listo"
+                Agregar Proceso_Ejecutando a Lista_Listos
+            
+            // Ponemos al nuevo a correr
+            Proceso_Ejecutando = Candidato
+            Si Proceso_Ejecutando en Lista_Listos:
+                Sacar Proceso_Ejecutando de Lista_Listos
+            
+            Proceso_Ejecutando.Estado = "Ejecutando"
+        Fin Si
+
+        // -----------------------------------------------------
+        // PASO 5: EJECUCIÓN
+        // -----------------------------------------------------
+        Si Proceso_Ejecutando != NULL:
+            Proceso_Ejecutando.TI_Restante = Proceso_Ejecutando.TI_Restante - 1
+            
+            // Verificamos si terminó
+            Si Proceso_Ejecutando.TI_Restante == 0:
+                Proceso_Ejecutando.Estado = "Terminado"
+                Proceso_Ejecutando.T_Finalizacion = Reloj + 1 // Termina al final de este ciclo
+                
+                // Liberar recursos
+                Liberar_Particion(Proceso_Ejecutando.Particion_ID)
+                Agregar Proceso_Ejecutando a Lista_Terminados
+                
+                Grado_Multiprog_Actual = Grado_Multiprog_Actual - 1
+                Proceso_Ejecutando = NULL
+            Fin Si
+        Fin Si
+
+        // -----------------------------------------------------
+        // PASO 6: IMPRESIÓN Y AVANCE
+        // -----------------------------------------------------
+        Imprimir_Tablas(Reloj, Memoria, Colas)
+        Reloj = Reloj + 1
+
+    FIN MIENTRAS
+
+    Calcular_Y_Mostrar_Estadisticas_Finales()
+
+FIN
