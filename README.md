@@ -5,3 +5,7 @@
 ### - Kowtun Andrea
 ### - Nuñez Esteban
 ### - Pozzer Maurizio
+
+```bash
+source venv/Scripts/activate
+```

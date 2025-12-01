@@ -70,7 +70,7 @@ class AplicacionPrincipal:
         self.lbl_proc_cpu.pack(pady=5)
         
         # Log de Eventos esta debajo del cpu
-        # usamos un cuadro de texto para mostrar los cambios cuando pasa algo nomás mostramos
+        # usamos un cuadro de texto para mostrar los cambios cuando pasa algo nomás
         marco_log = ttk.LabelFrame(marco_central, text="Log de Eventos", padding=5)
         marco_log.pack(fill="both", expand=True, pady=5)
         
@@ -86,7 +86,7 @@ class AplicacionPrincipal:
         self.lst_listos = self._crear_cuadro_cola(marco_colas, "Cola de Listos (Memoria)")
         self.lst_suspendidos = self._crear_cuadro_cola(marco_colas, "Cola de Listos/Suspendidos (Disco)")
         self.lst_terminados = self._crear_cuadro_cola(marco_colas, "Cola de Terminados")
-        self.lst_espera = self._crear_cuadro_cola(marco_colas, "Tiempos de Espera (Debug)")
+        self.lst_espera = self._crear_cuadro_cola(marco_colas, "Tiempos de Espera (en  Listos)")
 
     def _crear_cuadro_cola(self, padre, titulo):
         # definimos eeste mtodo para no repetir código al crear las cajitas de las colas
